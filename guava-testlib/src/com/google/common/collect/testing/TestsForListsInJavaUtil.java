@@ -16,10 +16,13 @@
 
 package com.google.common.collect.testing;
 
+import static com.google.common.collect.testing.testers.CollectionSpliteratorTester.getSpliteratorNotImmutableCollectionAllowsAddMethod;
+import static com.google.common.collect.testing.testers.CollectionSpliteratorTester.getSpliteratorNotImmutableCollectionAllowsRemoveMethod;
 import static com.google.common.collect.testing.testers.ListListIteratorTester.getListIteratorFullyModifiableMethod;
 import static com.google.common.collect.testing.testers.ListSubListTester.getSubListOriginalListSetAffectsSubListLargeListMethod;
 import static com.google.common.collect.testing.testers.ListSubListTester.getSubListOriginalListSetAffectsSubListMethod;
 import static com.google.common.collect.testing.testers.ListSubListTester.getSubListSubListRemoveAffectsOriginalLargeListMethod;
+import static java.util.Arrays.asList;
 
 import com.google.common.annotations.GwtIncompatible;
 import com.google.common.collect.testing.features.CollectionFeature;
@@ -35,6 +38,7 @@ import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.ListIterator;
+import java.util.Vector;
 import java.util.concurrent.CopyOnWriteArrayList;
 import junit.framework.Test;
 import junit.framework.TestSuite;
@@ -64,6 +68,7 @@ public class TestsForListsInJavaUtil {
     suite.addTest(testsForCheckedList());
     suite.addTest(testsForAbstractList());
     suite.addTest(testsForAbstractSequentialList());
+    suite.addTest(testsForVector());
     return suite;
   }
 
@@ -88,11 +93,13 @@ public class TestsForListsInJavaUtil {
   }
 
   protected Collection<Method> suppressForCopyOnWriteArrayList() {
-    return Arrays.asList(
+    return asList(
         getSubListOriginalListSetAffectsSubListMethod(),
         getSubListOriginalListSetAffectsSubListLargeListMethod(),
         getSubListSubListRemoveAffectsOriginalLargeListMethod(),
-        getListIteratorFullyModifiableMethod());
+        getListIteratorFullyModifiableMethod(),
+        getSpliteratorNotImmutableCollectionAllowsAddMethod(),
+        getSpliteratorNotImmutableCollectionAllowsRemoveMethod());
   }
 
   protected Collection<Method> suppressForUnmodifiableList() {
@@ -108,6 +115,10 @@ public class TestsForListsInJavaUtil {
   }
 
   protected Collection<Method> suppressForAbstractSequentialList() {
+    return Collections.emptySet();
+  }
+
+  protected Collection<Method> suppressForVector() {
     return Collections.emptySet();
   }
 
@@ -312,4 +323,23 @@ public class TestsForListsInJavaUtil {
         .suppressing(suppressForAbstractSequentialList())
         .createTestSuite();
   }
+
+  private Test testsForVector() {
+    return ListTestSuiteBuilder
+        .using(new TestStringListGenerator() {
+          @Override
+          protected List<String> create(String[] elements) {
+            return new Vector<String>(MinimalCollection.of(elements));
+          }
+        })
+        .named("Vector")
+        .withFeatures(
+            ListFeature.GENERAL_PURPOSE,
+            CollectionFeature.ALLOWS_NULL_VALUES,
+            CollectionFeature.FAILS_FAST_ON_CONCURRENT_MODIFICATION,
+            CollectionFeature.SERIALIZABLE,
+            CollectionSize.ANY)
+        .createTestSuite();
+  }
+
 }

@@ -21,143 +21,77 @@ import java.util.Set;
 import javax.annotation.Nullable;
 
 /**
- * A graph consisting of a set of nodes of type N and a set of (implicit) edges.
- * Users that want edges to be first-class objects should use the subtype {@link Network} instead.
+ * An interface for <a
+ * href="https://en.wikipedia.org/wiki/Graph_(discrete_mathematics)">graph</a>-structured data,
+ * whose edges are anonymous entities with no identity or information of their own.
  *
- * <p>For convenience, we may use the term 'graph' to refer to any subtype of {@link Graph},
- * including {@link Network}.
+ * <p>A graph is composed of a set of nodes and a set of edges connecting pairs of nodes.
  *
- * <p>Users that wish to modify a {@code Graph} must work with its subinterface,
- * {@link MutableGraph}.
+ * <p>There are three main interfaces provided to represent graphs. In order of increasing
+ * complexity they are: {@link Graph}, {@link ValueGraph}, and {@link Network}. You should generally
+ * prefer the simplest interface that satisfies your use case. See the <a
+ * href="https://github.com/google/guava/wiki/GraphsExplained#choosing-the-right-graph-type">
+ * "Choosing the right graph type"</a> section of the Guava User Guide for more details.
  *
- * <p>This interface permits, but does not enforce, any of the following variations of graphs:
+ * <h3>Capabilities</h3>
+ *
+ * <p>{@code Graph} supports the following use cases (<a
+ * href="https://github.com/google/guava/wiki/GraphsExplained#definitions">definitions of
+ * terms</a>):
+ *
  * <ul>
- * <li>directed and undirected edges
- * <li>nodes and edges with attributes (for example, weighted edges)
- * <li>nodes and edges of different types (for example, bipartite or multimodal graphs)
- * <li>internal representations as matrices, adjacency lists, adjacency maps, etc.
+ *   <li>directed graphs
+ *   <li>undirected graphs
+ *   <li>graphs that do/don't allow self-loops
+ *   <li>graphs whose nodes/edges are insertion-ordered, sorted, or unordered
  * </ul>
  *
- * <p>Extensions or implementations of this interface may enforce or disallow any or all
- * of these variations.
+ * <p>{@code Graph} explicitly does not support parallel edges, and forbids implementations or
+ * extensions with parallel edges. If you need parallel edges, use {@link Network}.
  *
- * <p>Definitions:
- * <ul>
- * <li>{@code nodeA} and {@code nodeB} are mutually <b>adjacent</b> (or <b>connected</b>) in
- *     {@code graph} if an edge has been added between them:
- *     <br><pre><code>
- *       graph.addEdge(nodeA, nodeB);  // after this returns, nodeA and nodeB are adjacent
- *     </pre></code>
- *   In this example, if {@code graph} is <b>directed</b>, then:
- *   <ul>
- *   <li>{@code nodeA} is a <b>predecessor</b> of {code nodeB} in {@code graph}
- *   <li>{@code nodeB} is a <b>successor</b> of {@code nodeA} in {@code graph}
- *   <li>{@code nodeA} has an (implicit) outgoing edge to {@code nodeB} in {@code graph}
- *   <li>{@code nodeB} has an (implicit) incoming edge from {@code nodeA} in {@code graph}
- *   </ul>
- *   If {@code graph} is <b>undirected</b>, then:
- *   <ul>
- *   <li>{@code nodeA} and {@code nodeB} are mutually predecessors and successors
- *       in {@code graph}
- *   <li>{@code nodeA} has an (implicit) edge in {@code graph} that is both outgoing to
- *       {@code nodeB} and incoming from {@code nodeB}, and vice versa.
- *   </ul>
- * <li>A self-loop is an edge that connects a node to itself.
- * </ul>
+ * <h3>Building a {@code Graph}</h3>
  *
- * <p>General notes:
- * <ul>
- * <li><b>Nodes must be useable as {@code Map} keys</b>:
- *   <ul>
- *   <li>They must be unique in a graph: nodes {@code nodeA} and {@code nodeB} are considered
- *       different if and only if {@code nodeA.equals(nodeB) == false}.
- *   <li>If graph elements have mutable state:
- *     <ul>
- *     <li>the mutable state must not be reflected in the {@code equals/hashCode} methods
- *         (this is discussed in the {@code Map} documentation in detail)
- *     <li>don't construct multiple elements that are equal to each other and expect them to be
- *         interchangeable.  In particular, when adding such elements to a graph, you should
- *         create them once and store the reference if you will need to refer to those elements
- *         more than once during creation (rather than passing {@code new MyMutableNode(id)}
- *         to each {@code add*()} call).
- *     </ul>
- *   </ul>
- *   <br>Generally speaking, your design may be more robust if you use immutable nodes and
- * store mutable per-element state in a separate data structure (e.g. an element-to-state map).
- * <li>There are no Node classes built in.  So you can have a {@code Graph<Integer>}
- *     or a {@code Graph<Author>} or a {@code Graph<Webpage>}.
- * <li>This framework supports multiple mechanisms for storing the topology of a graph,
- *      including:
- *   <ul>
- *   <li>the Graph implementation stores the topology (for example, by storing a
- *       {@code Map<N, N>} that maps nodes onto their adjacent nodes); this implies that the nodes
- *       are just keys, and can be shared among graphs
- *   <li>the nodes store the topology (for example, by storing a {@code List<E>} of adjacent nodes);
- *       this (usually) implies that nodes are graph-specific
- *   <li>a separate data repository (for example, a database) stores the topology
- *   </ul>
- * </ul>
+ * <p>The implementation classes that `common.graph` provides are not public, by design. To create
+ * an instance of one of the built-in implementations of {@code Graph}, use the {@link GraphBuilder}
+ * class:
  *
- * <p>Notes on accessors:
- * <ul>
- * <li>Accessors which return collections may return views of the Graph. Modifications to the graph
- *     which affect a view (e.g. calling {@code addNode(n)} or {@code removeNode(n)} while iterating
- *     through {@code nodes()}) are not supported and may result in ConcurrentModificationException.
- * <li>Accessors which return collections will return empty collections if their inputs are valid
- *     but no elements satisfy the request (for example: {@code adjacentNodes(node)} will return an
- *     empty collection if {@code node} has no adjacent nodes).
- * <li>Accessors will throw {@code IllegalArgumentException} if passed an element
- *     that is not in the graph.
- * <li>Accessors take Object parameters rather than generic type specifiers to match the pattern
- *     set by the Java Collections Framework.
- * </ul>
+ * <pre>{@code
+ *   MutableGraph<Integer> graph = GraphBuilder.undirected().build();
+ * }</pre>
  *
- * <p>Notes for implementors:
- * <ul>
- * <li>For accessors that return a {@code Set}, there are several options for the set behavior,
- *     including:
- *     <ol>
- *     <li>Set is an immutable copy (e.g. {@code ImmutableSet}): attempts to modify the set in any
- *         way will throw an exception, and modifications to the graph will <b>not</b> be reflected
- *         in the set.
- *     <li>Set is an unmodifiable view (e.g. {@code Collections.unmodifiableSet()}): attempts to
- *         modify the set in any way will throw an exception, and modifications to the graph will be
- *         reflected in the set.
- *     <li>Set is a mutable copy: it may be modified, but modifications to the graph will <b>not</b>
- *         be reflected in the set, and vice versa.
- *     <li>Set is a modifiable view: it may be modified, and modifications to the graph will be
- *         reflected in the set (but modifications to the set will <b>not</b> be reflected in the
- *         graph).
- *     <li>Set exposes the internal data directly: it may be modified, and modifications to the
- *         graph will be reflected in the set, and vice versa.
- *     </ol>
- *     Note that (1) and (2) are generally preferred. (5) is generally a hazardous design choice
- *     and should be avoided, because keeping the internal data structures consistent can be tricky.
- * <li>Prefer extending {@link AbstractGraph} over implementing {@link Graph} directly. This will
- *     ensure consistent {@link #equals(Object)} and {@link #hashCode()} across implementations.
- * <li>{@code Multimap}s are not sufficient internal data structures for Graph implementations
- *     that support isolated nodes (nodes that have no incident edges), due to their restriction
- *     that a key either maps to at least one value, or is not present in the {@code Multimap}.
- * </ul>
+ * <p>{@link GraphBuilder#build()} returns an instance of {@link MutableGraph}, which is a subtype
+ * of {@code Graph} that provides methods for adding and removing nodes and edges. If you do not
+ * need to mutate a graph (e.g. if you write a method than runs a read-only algorithm on the graph),
+ * you should use the non-mutating {@link Graph} interface, or an {@link ImmutableGraph}.
  *
- * <p>Examples of use:
+ * <p>You can create an immutable copy of an existing {@code Graph} using {@link
+ * ImmutableGraph#copyOf(Graph)}:
+ *
+ * <pre>{@code
+ *   ImmutableGraph<Integer> immutableGraph = ImmutableGraph.copyOf(graph);
+ * }</pre>
+ *
+ * <p>Instances of {@link ImmutableGraph} do not implement {@link MutableGraph} (obviously!) and are
+ * contractually guaranteed to be unmodifiable and thread-safe.
+ *
+ * <p>The Guava User Guide has <a
+ * href="https://github.com/google/guava/wiki/GraphsExplained#building-graph-instances">more
+ * information on (and examples of) building graphs</a>.
+ *
+ * <h3>Additional documentation</h3>
+ *
+ * <p>See the Guava User Guide for the {@code common.graph} package (<a
+ * href="https://github.com/google/guava/wiki/GraphsExplained">"Graphs Explained"</a>) for
+ * additional documentation, including:
+ *
  * <ul>
- * <li>Is {@code node} in the graph?
- * <pre><code>
- *   graph.nodes().contains(node)
- * </code></pre>
- * <li>Traversing an undirected graph node-wise:
- * <pre><code>
- *   // Visit nodes reachable from {@code node}.
- *   void depthFirstTraverse(N node) {
- *     if (!isVisited(node)) {
- *       visit(node);
- *       for (N successor : graph.successors(node)) {
- *         depthFirstTraverse(successor);
- *       }
- *     }
- *   }
- * </code></pre>
+ *   <li><a
+ *       href="https://github.com/google/guava/wiki/GraphsExplained#equals-hashcode-and-graph-equivalence">
+ *       {@code equals()}, {@code hashCode()}, and graph equivalence</a>
+ *   <li><a href="https://github.com/google/guava/wiki/GraphsExplained#synchronization">
+ *       Synchronization policy</a>
+ *   <li><a href="https://github.com/google/guava/wiki/GraphsExplained#notes-for-implementors">Notes
+ *       for implementors</a>
  * </ul>
  *
  * @author James Sexton
@@ -165,114 +99,89 @@ import javax.annotation.Nullable;
  * @param <N> Node parameter type
  * @since 20.0
  */
+// TODO(b/35456940): Update the documentation to reflect the new interfaces
 @Beta
-public interface Graph<N> {
-  /**
-   * Returns all nodes in this graph, in the order specified by {@link #nodeOrder()}.
-   */
+public interface Graph<N> extends BaseGraph<N> {
+  //
+  // Graph-level accessors
+  //
+
+  /** {@inheritDoc} */
+  @Override
   Set<N> nodes();
+
+  /** {@inheritDoc} */
+  @Override
+  Set<EndpointPair<N>> edges();
 
   //
   // Graph properties
   //
 
-  /**
-   * Returns true if the edges in this graph have a direction associated with them.
-   */
+  /** {@inheritDoc} */
+  @Override
   boolean isDirected();
 
-  /**
-   * Returns true if this graph allows self-loops (edges that connect a node to itself).
-   * Attempting to add a self-loop to a graph that does not allow them will throw an
-   * {@link UnsupportedOperationException}.
-   */
+  /** {@inheritDoc} */
+  @Override
   boolean allowsSelfLoops();
 
-  /**
-   * Returns the order of iteration for the elements of {@link #nodes()}.
-   */
-  ElementOrder<? super N> nodeOrder();
+  /** {@inheritDoc} */
+  @Override
+  ElementOrder<N> nodeOrder();
 
   //
   // Element-level accessors
   //
 
-  /**
-   * Returns the nodes which have an incident edge in common with {@code node} in this graph.
-   *
-   * @throws IllegalArgumentException if {@code node} is not an element of this graph
-   */
+  /** {@inheritDoc} */
+  @Override
   Set<N> adjacentNodes(Object node);
 
-  /**
-   * Returns all nodes in this graph adjacent to {@code node} which can be reached by traversing
-   * {@code node}'s incoming edges <i>against</i> the direction (if any) of the edge.
-   *
-   * @throws IllegalArgumentException if {@code node} is not an element of this graph
-   */
+  /** {@inheritDoc} */
+  @Override
   Set<N> predecessors(Object node);
 
-  /**
-   * Returns all nodes in this graph adjacent to {@code node} which can be reached by traversing
-   * {@code node}'s outgoing edges in the direction (if any) of the edge.
-   *
-   * <p>This is <i>not</i> the same as "all nodes reachable from {@code node} by following outgoing
-   * edges" (also known as {@code node}'s transitive closure).
-   *
-   * @throws IllegalArgumentException if {@code node} is not an element of this graph
-   */
+  /** {@inheritDoc} */
+  @Override
   Set<N> successors(Object node);
 
-  //
-  // Element-level queries
-  //
-
-  /**
-   * Returns the number of edges incident in this graph to {@code node}.  If this node has more than
-   * {@code Integer.MAX_VALUE} incident edges in this graph, returns {@code Integer.MAX_VALUE}.
-   *
-   * <p>Note that self-loops only count once towards a node's degree.
-   *
-   * @throws IllegalArgumentException if {@code node} is not an element of this graph
-   */
+  /** {@inheritDoc} */
+  @Override
   int degree(Object node);
 
-  /**
-   * Returns the number of incoming edges in this graph of {@code node}.  If this node has more than
-   * {@code Integer.MAX_VALUE} incoming edges in this graph, returns {@code Integer.MAX_VALUE}.
-   *
-   * @throws IllegalArgumentException if {@code node} is not an element of this graph
-   */
+  /** {@inheritDoc} */
+  @Override
   int inDegree(Object node);
 
-  /**
-   * Returns the number of outgoing edges in this graph of {@code node}.  If this node has more than
-   * {@code Integer.MAX_VALUE} outgoing edges in this graph, returns {@code Integer.MAX_VALUE}.
-   *
-   * @throws IllegalArgumentException if {@code node} is not an element of this graph
-   */
+  /** {@inheritDoc} */
+  @Override
   int outDegree(Object node);
 
+  /** {@inheritDoc} */
+  @Override
+  boolean hasEdge(Object nodeU, Object nodeV);
+
+  //
+  // Graph identity
+  //
+
   /**
-   * Returns {@code true} iff {@code object} is a {@link Graph} that has the same structural
-   * relationships as those in this graph.
+   * Returns {@code true} iff {@code object} is a {@link Graph} that has the same elements and the
+   * same structural relationships as those in this graph.
    *
    * <p>Thus, two graphs A and B are equal if <b>all</b> of the following are true:
+   *
    * <ul>
-   * <li>A and B have the same {@link #isDirected() directedness}.
-   * <li>A and B have the same node set.
-   * <li>A and B have the same adjacency relationships, i.e., for each node, the sets of successor
-   *     and predecessor nodes are the same in both graphs.
+   * <li>A and B have equal {@link #isDirected() directedness}.
+   * <li>A and B have equal {@link #nodes() node sets}.
+   * <li>A and B have equal {@link #edges() edge sets}.
    * </ul>
    *
-   * <p>Graph properties are <b>not</b> respected by this method. For example, two graphs may
-   * be considered equal even if one allows self-loops and the other doesn't. Additionally, the
-   * order in which edges or nodes are added to the graph, and the order in which they are
-   * iterated over, are irrelevant.
-   *
-   * <p>A {@link Graph} cannot be equal to an instance of a subinterface of {@link Graph} that
-   * redefines the definition of equality, such as {@link Network}, even if by this definition they
-   * would otherwise be equal.
+   * <p>Graph properties besides {@link #isDirected() directedness} do <b>not</b> affect equality.
+   * For example, two graphs may be considered equal even if one allows self-loops and the other
+   * doesn't. Additionally, the order in which nodes or edges are added to the graph, and the order
+   * in which they are iterated over, are irrelevant.
    *
    * <p>A reference implementation of this is provided by {@link AbstractGraph#equals(Object)}.
    */
@@ -280,8 +189,8 @@ public interface Graph<N> {
   boolean equals(@Nullable Object object);
 
   /**
-   * Returns the hash code for this graph. The hash code of a graph is defined as the hash code
-   * of a map from each of the graph's nodes to its successor nodes.
+   * Returns the hash code for this graph. The hash code of a graph is defined as the hash code of
+   * the set returned by {@link #edges()}.
    *
    * <p>A reference implementation of this is provided by {@link AbstractGraph#hashCode()}.
    */

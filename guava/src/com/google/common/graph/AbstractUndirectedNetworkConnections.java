@@ -31,13 +31,11 @@ import java.util.Set;
  * @param <E> Edge parameter type
  */
 abstract class AbstractUndirectedNetworkConnections<N, E> implements NetworkConnections<N, E> {
-  /**
-   * Keys are edges incident to the origin node, values are the node at the other end.
-   */
+  /** Keys are edges incident to the origin node, values are the node at the other end. */
   protected final Map<E, N> incidentEdgeMap;
 
   protected AbstractUndirectedNetworkConnections(Map<E, N> incidentEdgeMap) {
-    this.incidentEdgeMap = checkNotNull(incidentEdgeMap, "incidentEdgeMap");
+    this.incidentEdgeMap = checkNotNull(incidentEdgeMap);
   }
 
   @Override
@@ -80,7 +78,6 @@ abstract class AbstractUndirectedNetworkConnections<N, E> implements NetworkConn
 
   @Override
   public N removeOutEdge(Object edge) {
-    checkNotNull(edge, "edge");
     N previousNode = incidentEdgeMap.remove(edge);
     return checkNotNull(previousNode);
   }
@@ -94,8 +91,6 @@ abstract class AbstractUndirectedNetworkConnections<N, E> implements NetworkConn
 
   @Override
   public void addOutEdge(E edge, N node) {
-    checkNotNull(edge, "edge");
-    checkNotNull(node, "node");
     N previousNode = incidentEdgeMap.put(edge, node);
     checkState(previousNode == null);
   }

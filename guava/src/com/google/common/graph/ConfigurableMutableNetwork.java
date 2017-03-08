@@ -39,12 +39,10 @@ import com.google.errorprone.annotations.CanIgnoreReturnValue;
  * @param <N> Node parameter type
  * @param <E> Edge parameter type
  */
-final class ConfigurableMutableNetwork<N, E>
-    extends AbstractConfigurableNetwork<N, E> implements MutableNetwork<N, E> {
+final class ConfigurableMutableNetwork<N, E> extends ConfigurableNetwork<N, E>
+    implements MutableNetwork<N, E> {
 
-  /**
-   * Constructs a mutable graph with the properties specified in {@code builder}.
-   */
+  /** Constructs a mutable graph with the properties specified in {@code builder}. */
   ConfigurableMutableNetwork(NetworkBuilder<? super N, ? super E> builder) {
     super(builder);
   }
@@ -76,38 +74,45 @@ final class ConfigurableMutableNetwork<N, E>
 
   @Override
   @CanIgnoreReturnValue
-  public boolean addEdge(E edge, N nodeA, N nodeB) {
+  public boolean addEdge(N nodeU, N nodeV, E edge) {
+    checkNotNull(nodeU, "nodeU");
+    checkNotNull(nodeV, "nodeV");
     checkNotNull(edge, "edge");
-    checkNotNull(nodeA, "nodeA");
-    checkNotNull(nodeB, "nodeB");
 
     if (containsEdge(edge)) {
-      Endpoints<N> existingEndpoints = incidentNodes(edge);
-      Endpoints<N> newEndpoints = Endpoints.of(this, nodeA, nodeB);
-      checkArgument(existingEndpoints.equals(newEndpoints),
-          REUSING_EDGE, edge, existingEndpoints, newEndpoints);
+      EndpointPair<N> existingIncidentNodes = incidentNodes(edge);
+      EndpointPair<N> newIncidentNodes = EndpointPair.of(this, nodeU, nodeV);
+      checkArgument(
+          existingIncidentNodes.equals(newIncidentNodes),
+          REUSING_EDGE,
+          edge,
+          existingIncidentNodes,
+          newIncidentNodes);
       return false;
     }
-    NetworkConnections<N, E> connectionsA = nodeConnections.get(nodeA);
+    NetworkConnections<N, E> connectionsU = nodeConnections.get(nodeU);
     if (!allowsParallelEdges()) {
-      checkArgument(!(connectionsA != null && connectionsA.successors().contains(nodeB)),
-          PARALLEL_EDGES_NOT_ALLOWED, nodeA, nodeB);
+      checkArgument(
+          !(connectionsU != null && connectionsU.successors().contains(nodeV)),
+          PARALLEL_EDGES_NOT_ALLOWED,
+          nodeU,
+          nodeV);
     }
-    boolean isSelfLoop = nodeA.equals(nodeB);
+    boolean isSelfLoop = nodeU.equals(nodeV);
     if (!allowsSelfLoops()) {
-      checkArgument(!isSelfLoop, SELF_LOOPS_NOT_ALLOWED, nodeA);
+      checkArgument(!isSelfLoop, SELF_LOOPS_NOT_ALLOWED, nodeU);
     }
 
-    if (connectionsA == null) {
-      connectionsA = addNodeInternal(nodeA);
+    if (connectionsU == null) {
+      connectionsU = addNodeInternal(nodeU);
     }
-    connectionsA.addOutEdge(edge, nodeB);
-    NetworkConnections<N, E> connectionsB = nodeConnections.get(nodeB);
-    if (connectionsB == null) {
-      connectionsB = addNodeInternal(nodeB);
+    connectionsU.addOutEdge(edge, nodeV);
+    NetworkConnections<N, E> connectionsV = nodeConnections.get(nodeV);
+    if (connectionsV == null) {
+      connectionsV = addNodeInternal(nodeV);
     }
-    connectionsB.addInEdge(edge, nodeA, isSelfLoop);
-    edgeToReferenceNode.put(edge, nodeA);
+    connectionsV.addInEdge(edge, nodeU, isSelfLoop);
+    edgeToReferenceNode.put(edge, nodeU);
     return true;
   }
 
@@ -135,16 +140,16 @@ final class ConfigurableMutableNetwork<N, E>
   public boolean removeEdge(Object edge) {
     checkNotNull(edge, "edge");
 
-    N nodeA = edgeToReferenceNode.get(edge);
-    if (nodeA == null) {
+    N nodeU = edgeToReferenceNode.get(edge);
+    if (nodeU == null) {
       return false;
     }
 
-    NetworkConnections<N, E> connectionsA = nodeConnections.get(nodeA);
-    N nodeB = connectionsA.oppositeNode(edge);
-    NetworkConnections<N, E> connectionsB = nodeConnections.get(nodeB);
-    connectionsA.removeOutEdge(edge);
-    connectionsB.removeInEdge(edge, allowsSelfLoops() && nodeA.equals(nodeB));
+    NetworkConnections<N, E> connectionsU = nodeConnections.get(nodeU);
+    N nodeV = connectionsU.oppositeNode(edge);
+    NetworkConnections<N, E> connectionsV = nodeConnections.get(nodeV);
+    connectionsU.removeOutEdge(edge);
+    connectionsV.removeInEdge(edge, allowsSelfLoops() && nodeU.equals(nodeV));
     edgeToReferenceNode.remove(edge);
     return true;
   }

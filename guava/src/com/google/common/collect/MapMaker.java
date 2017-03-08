@@ -25,7 +25,6 @@ import com.google.common.base.Equivalence;
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.MapMakerInternalMap.Strength;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
-
 import java.lang.ref.WeakReference;
 import java.util.ConcurrentModificationException;
 import java.util.Map;
@@ -269,7 +268,7 @@ public final class MapMaker {
     if (!useCustomMap) {
       return new ConcurrentHashMap<K, V>(getInitialCapacity(), 0.75f, getConcurrencyLevel());
     }
-    return new MapMakerInternalMap<K, V>(this);
+    return MapMakerInternalMap.create(this);
   }
 
   /**
@@ -277,13 +276,13 @@ public final class MapMaker {
    * class not exposed through ConcurrentMap.
    */
   @GwtIncompatible // MapMakerInternalMap
-  <K, V> MapMakerInternalMap<K, V> makeCustomMap() {
-    return new MapMakerInternalMap<K, V>(this);
+  <K, V> MapMakerInternalMap<K, V, ?, ?> makeCustomMap() {
+    return MapMakerInternalMap.create(this);
   }
 
   /**
    * Returns a string representation for this MapMaker instance. The exact form of the returned
-   * string is not specificed.
+   * string is not specified.
    */
   @Override
   public String toString() {

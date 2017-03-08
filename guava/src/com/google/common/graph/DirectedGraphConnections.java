@@ -20,6 +20,8 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.graph.GraphConstants.INNER_CAPACITY;
 import static com.google.common.graph.GraphConstants.INNER_LOAD_FACTOR;
+import static com.google.common.graph.Graphs.checkNonNegative;
+import static com.google.common.graph.Graphs.checkPositive;
 
 import com.google.common.collect.AbstractIterator;
 import com.google.common.collect.ImmutableMap;
@@ -34,46 +36,68 @@ import java.util.Set;
 import javax.annotation.Nullable;
 
 /**
- * A class representing an origin node's adjacent nodes in a directed graph.
+ * An implementation of {@link GraphConnections} for directed graphs.
  *
  * @author James Sexton
  * @param <N> Node parameter type
+ * @param <V> Value parameter type
  */
-final class DirectedGraphConnections<N> implements GraphConnections<N> {
-  enum Adjacency {
-    PRED,
-    SUCC,
-    BOTH;
+final class DirectedGraphConnections<N, V> implements GraphConnections<N, V> {
+  /**
+   * A wrapper class to indicate a node is both a predecessor and successor while still providing
+   * the successor value.
+   */
+  private static final class PredAndSucc {
+    private final Object successorValue;
+
+    PredAndSucc(Object successorValue) {
+      this.successorValue = successorValue;
+    }
   }
 
-  private final Map<N, Adjacency> adjacentNodes;
+  private static final Object PRED = new Object();
+
+  // Every value in this map must either be an instance of PredAndSucc with a successorValue of
+  // type V, PRED (representing predecessor), or an instance of type V (representing successor).
+  private final Map<N, Object> adjacentNodeValues;
 
   private int predecessorCount;
   private int successorCount;
 
   private DirectedGraphConnections(
-      Map<N, Adjacency> adjacentNodes, int predecessorCount, int successorCount) {
-    this.adjacentNodes = checkNotNull(adjacentNodes, "adjacentNodes");
-    this.predecessorCount = predecessorCount;
-    this.successorCount = successorCount;
+      Map<N, Object> adjacentNodeValues, int predecessorCount, int successorCount) {
+    this.adjacentNodeValues = checkNotNull(adjacentNodeValues);
+    this.predecessorCount = checkNonNegative(predecessorCount);
+    this.successorCount = checkNonNegative(successorCount);
+    checkState(
+        predecessorCount <= adjacentNodeValues.size()
+            && successorCount <= adjacentNodeValues.size());
   }
 
-  static <N> DirectedGraphConnections<N> of() {
+  static <N, V> DirectedGraphConnections<N, V> of() {
     // We store predecessors and successors in the same map, so double the initial capacity.
     int initialCapacity = INNER_CAPACITY * 2;
-    return new DirectedGraphConnections<N>(
-        new HashMap<N, Adjacency>(initialCapacity, INNER_LOAD_FACTOR), 0, 0);
+    return new DirectedGraphConnections<N, V>(
+        new HashMap<N, Object>(initialCapacity, INNER_LOAD_FACTOR), 0, 0);
   }
 
-  static <N> DirectedGraphConnections<N> ofImmutable(
-      Map<N, Adjacency> adjacentNodes, int predecessorCount, int successorCount) {
-    return new DirectedGraphConnections<N>(
-        ImmutableMap.copyOf(adjacentNodes), predecessorCount, successorCount);
+  static <N, V> DirectedGraphConnections<N, V> ofImmutable(
+      Set<N> predecessors, Map<N, V> successorValues) {
+    Map<N, Object> adjacentNodeValues = new HashMap<N, Object>();
+    adjacentNodeValues.putAll(successorValues);
+    for (N predecessor : predecessors) {
+      Object value = adjacentNodeValues.put(predecessor, PRED);
+      if (value != null) {
+        adjacentNodeValues.put(predecessor, new PredAndSucc(value));
+      }
+    }
+    return new DirectedGraphConnections<N, V>(
+        ImmutableMap.copyOf(adjacentNodeValues), predecessors.size(), successorValues.size());
   }
 
   @Override
   public Set<N> adjacentNodes() {
-    return Collections.unmodifiableSet(adjacentNodes.keySet());
+    return Collections.unmodifiableSet(adjacentNodeValues.keySet());
   }
 
   @Override
@@ -81,12 +105,12 @@ final class DirectedGraphConnections<N> implements GraphConnections<N> {
     return new AbstractSet<N>() {
       @Override
       public UnmodifiableIterator<N> iterator() {
-        final Iterator<Entry<N, Adjacency>> entries = adjacentNodes.entrySet().iterator();
+        final Iterator<Entry<N, Object>> entries = adjacentNodeValues.entrySet().iterator();
         return new AbstractIterator<N>() {
           @Override
           protected N computeNext() {
             while (entries.hasNext()) {
-              Entry<N, Adjacency> entry = entries.next();
+              Entry<N, Object> entry = entries.next();
               if (isPredecessor(entry.getValue())) {
                 return entry.getKey();
               }
@@ -102,8 +126,8 @@ final class DirectedGraphConnections<N> implements GraphConnections<N> {
       }
 
       @Override
-      public boolean contains(Object obj) {
-        return isPredecessor(adjacentNodes.get(obj));
+      public boolean contains(@Nullable Object obj) {
+        return isPredecessor(adjacentNodeValues.get(obj));
       }
     };
   }
@@ -113,12 +137,12 @@ final class DirectedGraphConnections<N> implements GraphConnections<N> {
     return new AbstractSet<N>() {
       @Override
       public UnmodifiableIterator<N> iterator() {
-        final Iterator<Entry<N, Adjacency>> entries = adjacentNodes.entrySet().iterator();
+        final Iterator<Entry<N, Object>> entries = adjacentNodeValues.entrySet().iterator();
         return new AbstractIterator<N>() {
           @Override
           protected N computeNext() {
             while (entries.hasNext()) {
-              Entry<N, Adjacency> entry = entries.next();
+              Entry<N, Object> entry = entries.next();
               if (isSuccessor(entry.getValue())) {
                 return entry.getKey();
               }
@@ -134,75 +158,94 @@ final class DirectedGraphConnections<N> implements GraphConnections<N> {
       }
 
       @Override
-      public boolean contains(Object obj) {
-        return isSuccessor(adjacentNodes.get(obj));
+      public boolean contains(@Nullable Object obj) {
+        return isSuccessor(adjacentNodeValues.get(obj));
       }
     };
   }
 
-  @SuppressWarnings("unchecked") // Safe because we only cast if node is a key of Map<N, Adjacency>
+  @SuppressWarnings("unchecked")
+  @Override
+  public V value(Object node) {
+    Object value = adjacentNodeValues.get(node);
+    if (value == PRED) {
+      return null;
+    }
+    if (value instanceof PredAndSucc) {
+      return (V) ((PredAndSucc) value).successorValue;
+    }
+    return (V) value;
+  }
+
+  @SuppressWarnings("unchecked")
   @Override
   public void removePredecessor(Object node) {
-    checkNotNull(node, "node");
-    Adjacency adjacency = adjacentNodes.get(node);
-    if (adjacency == Adjacency.BOTH) {
-      adjacentNodes.put((N) node, Adjacency.SUCC);
-      predecessorCount--;
-    } else if (adjacency == Adjacency.PRED) {
-      adjacentNodes.remove(node);
-      predecessorCount--;
+    Object previousValue = adjacentNodeValues.get(node);
+    if (previousValue == PRED) {
+      adjacentNodeValues.remove(node);
+      checkNonNegative(--predecessorCount);
+    } else if (previousValue instanceof PredAndSucc) {
+      adjacentNodeValues.put((N) node, ((PredAndSucc) previousValue).successorValue);
+      checkNonNegative(--predecessorCount);
     }
-    checkState(predecessorCount >= 0);
   }
 
-  @SuppressWarnings("unchecked") // Safe because we only cast if node is a key of Map<N, Adjacency>
+  @SuppressWarnings("unchecked")
   @Override
-  public void removeSuccessor(Object node) {
-    checkNotNull(node, "node");
-    Adjacency adjacency = adjacentNodes.get(node);
-    if (adjacency == Adjacency.BOTH) {
-      adjacentNodes.put((N) node, Adjacency.PRED);
-      successorCount--;
-    } else if (adjacency == Adjacency.SUCC) {
-      adjacentNodes.remove(node);
-      successorCount--;
+  public V removeSuccessor(Object node) {
+    Object previousValue = adjacentNodeValues.get(node);
+    if (previousValue == null || previousValue == PRED) {
+      return null;
+    } else if (previousValue instanceof PredAndSucc) {
+      adjacentNodeValues.put((N) node, PRED);
+      checkNonNegative(--successorCount);
+      return (V) ((PredAndSucc) previousValue).successorValue;
+    } else { // successor
+      adjacentNodeValues.remove(node);
+      checkNonNegative(--successorCount);
+      return (V) previousValue;
     }
-    checkState(successorCount >= 0);
-  }
-
-  @Override
-  public void addPredecessor(N node) {
-    checkNotNull(node, "node");
-    Adjacency adjacency = adjacentNodes.get(node);
-    if (adjacency == null) {
-      adjacentNodes.put(node, Adjacency.PRED);
-      predecessorCount++;
-    } else if (adjacency == Adjacency.SUCC) {
-      adjacentNodes.put(node, Adjacency.BOTH);
-      predecessorCount++;
-    }
-    checkState(predecessorCount >= 1);
   }
 
   @Override
-  public void addSuccessor(N node) {
-    checkNotNull(node, "node");
-    Adjacency adjacency = adjacentNodes.get(node);
-    if (adjacency == null) {
-      adjacentNodes.put(node, Adjacency.SUCC);
-      successorCount++;
-    } else if (adjacency == Adjacency.PRED) {
-      adjacentNodes.put(node, Adjacency.BOTH);
-      successorCount++;
+  public void addPredecessor(N node, V unused) {
+    Object previousValue = adjacentNodeValues.put(node, PRED);
+    if (previousValue == null) {
+      checkPositive(++predecessorCount);
+    } else if (previousValue instanceof PredAndSucc) {
+      // Restore previous PredAndSucc object.
+      adjacentNodeValues.put(node, previousValue);
+    } else if (previousValue != PRED) { // successor
+      // Do NOT use method parameter value 'unused'. In directed graphs, successors store the value.
+      adjacentNodeValues.put(node, new PredAndSucc(previousValue));
+      checkPositive(++predecessorCount);
     }
-    checkState(successorCount >= 1);
   }
 
-  private static boolean isPredecessor(@Nullable Adjacency adjacency) {
-    return (adjacency == Adjacency.PRED || adjacency == Adjacency.BOTH);
+  @SuppressWarnings("unchecked")
+  @Override
+  public V addSuccessor(N node, V value) {
+    Object previousValue = adjacentNodeValues.put(node, value);
+    if (previousValue == null) {
+      checkPositive(++successorCount);
+      return null;
+    } else if (previousValue instanceof PredAndSucc) {
+      adjacentNodeValues.put(node, new PredAndSucc(value));
+      return (V) ((PredAndSucc) previousValue).successorValue;
+    } else if (previousValue == PRED) {
+      adjacentNodeValues.put(node, new PredAndSucc(value));
+      checkPositive(++successorCount);
+      return null;
+    } else { // successor
+      return (V) previousValue;
+    }
   }
 
-  private static boolean isSuccessor(@Nullable Adjacency adjacency) {
-    return (adjacency == Adjacency.SUCC || adjacency == Adjacency.BOTH);
+  private static boolean isPredecessor(@Nullable Object value) {
+    return (value == PRED) || (value instanceof PredAndSucc);
+  }
+
+  private static boolean isSuccessor(@Nullable Object value) {
+    return (value != PRED) && (value != null);
   }
 }

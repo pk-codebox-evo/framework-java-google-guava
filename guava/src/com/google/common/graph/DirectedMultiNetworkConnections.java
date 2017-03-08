@@ -16,7 +16,6 @@
 
 package com.google.common.graph;
 
-import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.graph.GraphConstants.INNER_CAPACITY;
 import static com.google.common.graph.GraphConstants.INNER_LOAD_FACTOR;
@@ -24,6 +23,7 @@ import static com.google.common.graph.GraphConstants.INNER_LOAD_FACTOR;
 import com.google.common.collect.HashMultiset;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Multiset;
+import com.google.errorprone.annotations.concurrent.LazyInit;
 import java.lang.ref.Reference;
 import java.lang.ref.SoftReference;
 import java.util.Collections;
@@ -39,8 +39,7 @@ import javax.annotation.Nullable;
  * @param <N> Node parameter type
  * @param <E> Edge parameter type
  */
-final class DirectedMultiNetworkConnections<N, E>
-    extends AbstractDirectedNetworkConnections<N, E> {
+final class DirectedMultiNetworkConnections<N, E> extends AbstractDirectedNetworkConnections<N, E> {
 
   private DirectedMultiNetworkConnections(
       Map<E, N> inEdges, Map<E, N> outEdges, int selfLoopCount) {
@@ -60,6 +59,7 @@ final class DirectedMultiNetworkConnections<N, E>
         ImmutableMap.copyOf(inEdges), ImmutableMap.copyOf(outEdges), selfLoopCount);
   }
 
+  @LazyInit
   private transient Reference<Multiset<N>> predecessorsReference;
 
   @Override
@@ -76,6 +76,7 @@ final class DirectedMultiNetworkConnections<N, E>
     return predecessors;
   }
 
+  @LazyInit
   private transient Reference<Multiset<N>> successorsReference;
 
   @Override
@@ -104,7 +105,7 @@ final class DirectedMultiNetworkConnections<N, E>
 
   @Override
   public N removeInEdge(Object edge, boolean isSelfLoop) {
-    N node = checkNotNull(super.removeInEdge(edge, isSelfLoop));
+    N node = super.removeInEdge(edge, isSelfLoop);
     Multiset<N> predecessors = getReference(predecessorsReference);
     if (predecessors != null) {
       checkState(predecessors.remove(node));
@@ -114,7 +115,7 @@ final class DirectedMultiNetworkConnections<N, E>
 
   @Override
   public N removeOutEdge(Object edge) {
-    N node = checkNotNull(super.removeOutEdge(edge));
+    N node = super.removeOutEdge(edge);
     Multiset<N> successors = getReference(successorsReference);
     if (successors != null) {
       checkState(successors.remove(node));
@@ -140,7 +141,8 @@ final class DirectedMultiNetworkConnections<N, E>
     }
   }
 
-  @Nullable private static <T> T getReference(@Nullable Reference<T> reference) {
+  @Nullable
+  private static <T> T getReference(@Nullable Reference<T> reference) {
     return (reference == null) ? null : reference.get();
   }
 }

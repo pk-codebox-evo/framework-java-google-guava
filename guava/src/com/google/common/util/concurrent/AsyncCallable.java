@@ -16,12 +16,11 @@ package com.google.common.util.concurrent;
 
 import com.google.common.annotations.Beta;
 import com.google.common.annotations.GwtCompatible;
-
 import java.util.concurrent.Future;
 
 /**
  * Computes a value, possibly asynchronously. For an example usage and more information, see {@link
- * Futures.FutureCombiner#callAsync(AsyncCallable)}.
+ * Futures.FutureCombiner#callAsync(AsyncCallable, java.util.concurrent.Executor)}.
  *
  * <p>Much like {@link java.util.concurrent.Callable}, but returning a {@link ListenableFuture}
  * result.

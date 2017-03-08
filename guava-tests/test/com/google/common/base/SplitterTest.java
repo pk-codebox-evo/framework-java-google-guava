@@ -364,6 +364,9 @@ public class SplitterTest extends TestCase {
   @GwtIncompatible // java.util.regex.Pattern
   @AndroidIncompatible // Bug in older versions of Android we test against, since fixed.
   public void testPatternSplitLookBehind() {
+    if (!Platform.usingJdkPatternCompiler()) {
+      return;
+    }
     String toSplit = ":foo::barbaz:";
     String regexPattern = "(?<=:)";
     Iterable<String> split = Splitter.onPattern(regexPattern).split(toSplit);
@@ -377,6 +380,21 @@ public class SplitterTest extends TestCase {
     String string = "foo<bar>bletch";
     Iterable<String> words = Splitter.on(Pattern.compile("\\b")).split(string);
     assertThat(words).containsExactly("foo", "<", "bar", ">", "bletch").inOrder();
+  }
+
+  @GwtIncompatible // java.util.regex.Pattern
+  public void testPatternSplitWordBoundary_singleCharInput() {
+    String string = "f";
+    Iterable<String> words = Splitter.on(Pattern.compile("\\b")).split(string);
+    assertThat(words).containsExactly("f").inOrder();
+  }
+
+  @AndroidIncompatible // Apparently Gingerbread's regex API is buggy.
+  @GwtIncompatible // java.util.regex.Pattern
+  public void testPatternSplitWordBoundary_singleWordInput() {
+    String string = "foo";
+    Iterable<String> words = Splitter.on(Pattern.compile("\\b")).split(string);
+    assertThat(words).containsExactly("foo").inOrder();
   }
 
   @GwtIncompatible // java.util.regex.Pattern
@@ -487,13 +505,15 @@ public class SplitterTest extends TestCase {
   @GwtIncompatible // java.util.regex.Pattern
   @AndroidIncompatible // not clear that j.u.r.Matcher promises to handle mutations during use
   public void testSplitterIterableIsLazy_pattern() {
+    if (!Platform.usingJdkPatternCompiler()) {
+      return;
+    }
     assertSplitterIterableIsLazy(Splitter.onPattern(","));
   }
 
   /**
-   * This test really pushes the boundaries of what we support. In general the
-   * splitter's behaviour is not well defined if the char sequence it's
-   * splitting is mutated during iteration.
+   * This test really pushes the boundaries of what we support. In general the splitter's behaviour
+   * is not well defined if the char sequence it's splitting is mutated during iteration.
    */
   private void assertSplitterIterableIsLazy(Splitter splitter) {
     StringBuilder builder = new StringBuilder();

@@ -22,7 +22,6 @@ import com.google.caliper.BeforeExperiment;
 import com.google.caliper.Benchmark;
 import com.google.caliper.Param;
 import com.google.common.collect.CollectionBenchmarkSampleData.Element;
-
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -234,6 +233,21 @@ public class MapBenchmark {
     boolean dummy = false;
     for (int i = 0; i < reps; i++) {
       for (Element key : map.keySet()) {
+        Element value = map.get(key);
+        dummy ^= key != value;
+      }
+    }
+    return dummy;
+
+  }
+
+  @Benchmark boolean iterateValuesAndGet(int reps) {
+    Map<Element, Element> map = mapToTest;
+
+    boolean dummy = false;
+    for (int i = 0; i < reps; i++) {
+      for (Element key : map.values()) {
+        // This normally wouldn't make sense, but because our keys are our values it kind of does
         Element value = map.get(key);
         dummy ^= key != value;
       }

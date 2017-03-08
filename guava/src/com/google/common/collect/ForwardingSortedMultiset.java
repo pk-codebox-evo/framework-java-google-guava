@@ -16,7 +16,6 @@ package com.google.common.collect;
 
 import com.google.common.annotations.Beta;
 import com.google.common.annotations.GwtCompatible;
-
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.NavigableSet;
@@ -55,7 +54,7 @@ public abstract class ForwardingSortedMultiset<E> extends ForwardingMultiset<E>
 
   @Override
   public NavigableSet<E> elementSet() {
-    return (NavigableSet<E>) super.elementSet();
+    return delegate().elementSet();
   }
 
   /**

@@ -93,6 +93,16 @@ public final class NullPointerTester {
   }
 
   /**
+   * Ignore {@code constructor} in the tests that follow. Returns this object.
+   *
+   * @since 22.0
+   */
+  public NullPointerTester ignore(Constructor<?> constructor) {
+    ignoredMembers.add(checkNotNull(constructor));
+    return this;
+  }
+
+  /**
    * Runs {@link #testConstructor} on every constructor in class {@code c} that
    * has at least {@code minimalVisibility}.
    */
@@ -276,7 +286,7 @@ public final class NullPointerTester {
       // a file.
       String visiblePackage = Reflection.getPackageName(cls);
       ImmutableList.Builder<Method> builder = ImmutableList.builder();
-      for (Class<?> type : TypeToken.of(cls).getTypes().classes().rawTypes()) {
+      for (Class<?> type : TypeToken.of(cls).getTypes().rawTypes()) {
         if (!Reflection.getPackageName(type).equals(visiblePackage)) {
           break;
         }
@@ -469,7 +479,37 @@ public final class NullPointerTester {
   }
 
   private boolean isIgnored(Member member) {
-    return member.isSynthetic() || ignoredMembers.contains(member);
+    return member.isSynthetic() || ignoredMembers.contains(member) || isEquals(member);
+  }
+
+  /**
+   * Returns true if the the given member is a method that overrides {@link Object#equals(Object)}.
+   *
+   * <p>The documentation for {@link Object#equals} says it should accept null, so don't require an
+   * explicit {@code @Nullable} annotation (see <a
+   * href="https://github.com/google/guava/issues/1819">#1819</a>).
+   *
+   * <p>It is not necessary to consider visibility, return type, or type parameter declarations. The
+   * declaration of a method with the same name and formal parameters as {@link Object#equals} that
+   * is not public and boolean-returning, or that declares any type parameters, would be rejected at
+   * compile-time.
+   */
+  private static boolean isEquals(Member member) {
+    if (!(member instanceof Method)) {
+      return false;
+    }
+    Method method = (Method) member;
+    if (!method.getName().contentEquals("equals")) {
+      return false;
+    }
+    Class<?>[] parameters = method.getParameterTypes();
+    if (parameters.length != 1) {
+      return false;
+    }
+    if (!parameters[0].equals(Object.class)) {
+      return false;
+    }
+    return true;
   }
 
   /**
